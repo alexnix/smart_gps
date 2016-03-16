@@ -19,7 +19,10 @@
 
     <div id="map"></div>
     <script>
-
+    var VIBRATE_DISTANCE = 3, corners = [], i = 0, PASS_DISTANCE = 1, j = 0, steps = [], total_steps = [];
+    function dist(a, b) {
+      return Math.sqrt( Math.pow((a.lat() - b.lat()), 2) + Math.pow((a.lng() - b.lng()),2) ) * 100000; 
+    }
     var me = {
         lat: null,
         lng: null,
@@ -51,10 +54,21 @@
         position: function(){
           return new google.maps.LatLng(this.lat, this.lng);
         },
+        teleport: function(lat, lng) {
+          this.lat = lat;
+          this.lng = lng;
+          this.update();
+        },
         update: function(){
-          console.log("!!");
           this.marker.setPosition(this.position());
-          //$.post('/api/latLng/'+this.lat+'/'+this.lng);
+          if(corners[i]){
+            var d = dist(this.position(), corners[i].center);
+            if( d < VIBRATE_DISTANCE ){
+              console.log(corners[i].orientation == 1? "DREAPTA" : "STANGA");
+              if( d < PASS_DISTANCE )
+                i++;
+            }
+          }
         }
       };
 
@@ -72,16 +86,18 @@
           here = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
           map.setCenter(here);
           marker_me = new google.maps.Marker({
-		    map: map,
-		    icon: 'https://upload.wikimedia.org/wikipedia/commons/0/0f/Black_dot.png'
-		  });
-
-		  me.init(position.coords.latitude, position.coords.longitude, map, marker_me);
-
+    		    map: map,
+    		    icon: 'http://upload.wikimedia.org/wikipedia/en/0/0f/Red_X_Symbol.gif'
+    		  });
+		      me.init(position.coords.latitude, position.coords.longitude, map, marker_me);
         })
 
         map.addListener('rightclick', function(event){
           calculateAndDisplayRoute(directionsService, directionsDisplay, here, event.latLng);
+        })
+
+        map.addListener('click', function(event){
+          me.teleport(event.latLng.lat(), event.latLng.lng());
         })
 
       }
@@ -92,7 +108,7 @@
           destination: destination,  // Ocean Beach.
           travelMode: "DRIVING"
         }, function(response, status) {
-          console.log(response)
+          console.log(response);
           if (status == google.maps.DirectionsStatus.OK) {
             directionsDisplay.setDirections(response);
             process(response)
@@ -102,42 +118,24 @@
         });
       }
 
-      function angle_of(idx1, idx2) {
-      	var seg1 = window.segments[idx1], seg2 = window.segments[idx2];
-      	m1 = (seg1.y.lat() - seg1.x.lat()) / (seg1.y.lng() - seg1.x.lng());
-      	m2 = (seg2.y.lat() - seg2.x.lat()) / (seg2.y.lng() - seg2.x.lng());
-      	console.log(Math.abs( (m1 - m2) / (1 - m1*m2) ));
-      }
-
-      var visible_seg;
-      function show_segment(idx) {
-      	seg = window.segments[idx];
-      	var path = [
-      		{lat: seg.x.lat(), lng: seg.x.lng()},
-      		{lat: seg.y.lat(), lng: seg.y.lng()},
-      	];
-      	if(visible_seg)
-      		visible_seg.setMap(null);
-      	var visible_seg = new google.maps.Polyline({
-		    path: path,
-		    geodesic: true,
-		    strokeColor: '#FF0000',
-		    strokeOpacity: 1.0,
-		    strokeWeight: 2
-		  });
-
-		 visible_seg.setMap(map);
-
-      }
-
       function process (response) {
       	var m1 = null, m2 = null, angles = [];
         window.segments = [];
-        response.routes[0].overview_path.forEach(function(seg, idx){
+        response.routes[0].overview_path.forEach(function(p, idx, points){
         	
         	if( idx >= 1 ) {
         		m1 = m2;
-        		x = seg;
+        		x = points[idx];
+            y = points[idx - 1];
+            
+            steps = [];
+            draw(x, y);
+
+            steps.sort(function(a, b){
+              return Distance(y, a) - Distance(y, b);
+            });
+            total_steps = total_steps.concat(steps);
+
         		m2 = (y.lng() - x.lng() != 0)? (y.lat() - x.lat()) / (y.lng() - x.lng()): 99999;
         		segments.push({x:x, y:y});
         	}
@@ -145,18 +143,77 @@
         	if(m1){
         		angle = Math.abs( (m1 - m2) / (1 - m1*m2) );
         		angles.push(angle);
-        		if(angle > 0.8)
-        			var marker = new google.maps.Marker({
-					    position: new google.maps.LatLng(y.lat(), y.lng()),
-					    map: map,
-					    title: 'Hello World!'
-					  });
+        		if(angle > 0.8){
+                z = points[idx - 2];
+          			var marker = new google.maps.Marker({
+    					    position: new google.maps.LatLng(y.lat(), y.lng()),
+    					    map: map,
+    					    title: 'Hello World!'
+    					  });
+                corners.push({
+                  center: new google.maps.LatLng(y.lat(), y.lng()),
+                  orientation: Math.sign((y.lat() - z.lat()) * (x.lng() - z.lng()) - (y.lng() - z.lng()) * (x.lat() - z.lat()))
+                });
+            }
         	}
-        	y = seg;
+
+        	//y = seg;
         });
 
         window.angles = angles;
       }
+
+
+      var draw = function(a, b) {
+        if( Distance(a, b) > 0.000007 ){
+          var m = Middle(a, b);
+          steps.push(m);
+          //newMarker(m.lat(), m.lng(), false);
+          draw(a, m);
+          draw(b, m);
+        }
+      }
+
+      MLatLng = function(latitude, longitude) {
+        this.lat = function(){
+          return latitude;
+        },
+        this.lng = function(){
+          return longitude;
+        }
+      };
+
+      Distance = function(a, b) {
+        return Math.sqrt( Math.pow(a.lat()-b.lat(), 2) + Math.pow(a.lng()-b.lng(), 2) );
+      };
+
+      Middle = function(a, b){
+        return new MLatLng( (a.lat() + b.lat())/2, (a.lng()+b.lng())/2 );
+      };
+
+      function goto(i) {
+        me.teleport(total_steps[i].lat(), total_steps[i].lng());
+        j = i;
+      }
+
+      var newMarker = function(lat, lng, big){
+          var icon = 'http://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Location_dot_yellow.svg/10px-Location_dot_yellow.svg.png';
+          if(big){
+            icon = "http://www.alta.org/images/dotYellow.png";
+          }
+          var marker = new google.maps.Marker({
+            position: {
+              lat: lat,
+              lng: lng,
+            },
+            big: big,
+            map: map,
+            icon: icon,
+          });
+
+
+          return marker;
+        };
 
     </script>
     <script async defer
@@ -183,10 +240,45 @@
               me.down();
               break;
 
+              case 32: // advance
+              me.teleport(total_steps[j].lat(), total_steps[j].lng());
+              j++;
+              break;
+
               default: return; // exit this handler for other keys
           }
           e.preventDefault(); // prevent the default action (scroll / move caret)
       });
+
+
+
+      function angle_of(idx1, idx2) {
+        var seg1 = window.segments[idx1], seg2 = window.segments[idx2];
+        m1 = (seg1.y.lat() - seg1.x.lat()) / (seg1.y.lng() - seg1.x.lng());
+        m2 = (seg2.y.lat() - seg2.x.lat()) / (seg2.y.lng() - seg2.x.lng());
+        console.log(Math.abs( (m1 - m2) / (1 - m1*m2) ));
+      }
+
+      var visible_seg;
+      function show_segment(idx) {
+        seg = window.segments[idx];
+        var path = [
+          {lat: seg.x.lat(), lng: seg.x.lng()},
+          {lat: seg.y.lat(), lng: seg.y.lng()},
+        ];
+        if(visible_seg)
+          visible_seg.setMap(null);
+        var visible_seg = new google.maps.Polyline({
+        path: path,
+        geodesic: true,
+        strokeColor: '#FF0000',
+        strokeOpacity: 1.0,
+        strokeWeight: 2
+      });
+
+      visible_seg.setMap(map);
+
+      }
     </script>
   </body>
 </html>
