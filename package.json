@@ -1,0 +1,20 @@
+{
+  "name": "android_emulator_position_mock",
+  "version": "1.0.0",
+  "description": "GUI for easily mock Android Emulator Location. You can also simulate moving on the map.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "author": "Alexandru Niculae",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.13.4",
+    "open": "0.0.5",
+    "socket.io": "^1.4.5",
+    "socket.io-client": "^1.4.5",
+    "sweetalert": "^1.1.3",
+    "telnet-client": "^0.5.0"
+  }
+}

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Travel modes in directions</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+
+    <div id="map"></div>
+    <script>
+
+    var me = {
+        lat: null,
+        lng: null,
+        map: null,
+        marker: null,
+        step: 0.000007,
+        init: function(lat, lng, map, marker){
+          this.lat = lat;
+          this.lng = lng;
+          this.map = map;
+          this.marker = marker;
+        },
+        left: function() {
+          this.lng -= this.step;
+          this.update();
+        },
+        right: function(){
+          this.lng += this.step;
+          this.update();
+        },
+        up: function() {
+          this.lat += this.step;
+          this.update();
+        },
+        down: function() {
+          this.lat -= this.step;
+          this.update();
+        },
+        position: function(){
+          return new google.maps.LatLng(this.lat, this.lng);
+        },
+        update: function(){
+          console.log("!!");
+          this.marker.setPosition(this.position());
+          //$.post('/api/latLng/'+this.lat+'/'+this.lng);
+        }
+      };
+
+      var map;
+      function initMap() {
+        var here;
+        var directionsDisplay = new google.maps.DirectionsRenderer;
+        var directionsService = new google.maps.DirectionsService;
+        map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 17,
+        });
+        directionsDisplay.setMap(map);
+
+        navigator.geolocation.getCurrentPosition(function(position){
+          here = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+          map.setCenter(here);
+          marker_me = new google.maps.Marker({
+		    map: map,
+		    icon: 'https://upload.wikimedia.org/wikipedia/commons/0/0f/Black_dot.png'
+		  });
+
+		  me.init(position.coords.latitude, position.coords.longitude, map, marker_me);
+
+        })
+
+        map.addListener('rightclick', function(event){
+          calculateAndDisplayRoute(directionsService, directionsDisplay, here, event.latLng);
+        })
+
+      }
+
+      function calculateAndDisplayRoute(directionsService, directionsDisplay, origin, destination) {
+        directionsService.route({
+          origin: origin,  // Haight.
+          destination: destination,  // Ocean Beach.
+          travelMode: "DRIVING"
+        }, function(response, status) {
+          console.log(response)
+          if (status == google.maps.DirectionsStatus.OK) {
+            directionsDisplay.setDirections(response);
+            process(response)
+          } else {
+            window.alert('Directions request failed due to ' + status);
+          }
+        });
+      }
+
+      function angle_of(idx1, idx2) {
+      	var seg1 = window.segments[idx1], seg2 = window.segments[idx2];
+      	m1 = (seg1.y.lat() - seg1.x.lat()) / (seg1.y.lng() - seg1.x.lng());
+      	m2 = (seg2.y.lat() - seg2.x.lat()) / (seg2.y.lng() - seg2.x.lng());
+      	console.log(Math.abs( (m1 - m2) / (1 - m1*m2) ));
+      }
+
+      var visible_seg;
+      function show_segment(idx) {
+      	seg = window.segments[idx];
+      	var path = [
+      		{lat: seg.x.lat(), lng: seg.x.lng()},
+      		{lat: seg.y.lat(), lng: seg.y.lng()},
+      	];
+      	if(visible_seg)
+      		visible_seg.setMap(null);
+      	var visible_seg = new google.maps.Polyline({
+		    path: path,
+		    geodesic: true,
+		    strokeColor: '#FF0000',
+		    strokeOpacity: 1.0,
+		    strokeWeight: 2
+		  });
+
+		 visible_seg.setMap(map);
+
+      }
+
+      function process (response) {
+      	var m1 = null, m2 = null, angles = [];
+        window.segments = [];
+        response.routes[0].overview_path.forEach(function(seg, idx){
+        	
+        	if( idx >= 1 ) {
+        		m1 = m2;
+        		x = seg;
+        		m2 = (y.lng() - x.lng() != 0)? (y.lat() - x.lat()) / (y.lng() - x.lng()): 99999;
+        		segments.push({x:x, y:y});
+        	}
+
+        	if(m1){
+        		angle = Math.abs( (m1 - m2) / (1 - m1*m2) );
+        		angles.push(angle);
+        		if(angle > 0.8)
+        			var marker = new google.maps.Marker({
+					    position: new google.maps.LatLng(y.lat(), y.lng()),
+					    map: map,
+					    title: 'Hello World!'
+					  });
+        	}
+        	y = seg;
+        });
+
+        window.angles = angles;
+      }
+
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAWColN1am3vdiGdBssTJ6Vp1aoQ1SwjdA&callback=initMap">
+	</script>
+
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
+    <script type="text/javascript">
+     $(document).keydown(function(e) {
+          switch(e.which) {
+              case 65: // left
+              me.left();
+              break;
+
+              case 87: // up
+              me.up();
+              break;
+
+              case 68: // right
+              me.right();
+              break;
+
+              case 83: // down
+              me.down();
+              break;
+
+              default: return; // exit this handler for other keys
+          }
+          e.preventDefault(); // prevent the default action (scroll / move caret)
+      });
+    </script>
+  </body>
+</html>
